@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  background: #0b0d10;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  color: #f8fafc;
+  background: #0b0d10;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+summary::marker {
+  color: #67e8f9;
+}
