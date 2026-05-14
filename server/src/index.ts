@@ -117,16 +117,16 @@ const nodeIds = {
   save: "6"
 } as const;
 
-app.use(cors({
-  origin(origin, callback) {
-    if (!origin || allowedOrigins.length === 0 || allowedOrigins.includes(origin.replace(/\/+$/, ""))) {
-      callback(null, true);
-      return;
-    }
 
-    callback(new Error(`Origin ${origin} is not allowed by this API.`));
-  }
+app.use(cors({
+  origin: "*",
+  methods: ["GET", "POST", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
 }));
+
+// 🚨 Critical: handle preflight explicitly
+app.options("*", cors());
+
 app.use(express.json({ limit: "80mb" }));
 
 app.use("/api", (req, res, next) => {
@@ -1017,6 +1017,9 @@ app.post("/api/portal/generate", async (req, res, next) => {
 
 app.post("/api/portal/generate/stream", async (req, res) => {
   res.status(200);
+res.setHeader("Access-Control-Allow-Origin", "*");
+res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
   res.setHeader("Cache-Control", "no-cache, no-transform");
   res.setHeader("X-Accel-Buffering", "no");
