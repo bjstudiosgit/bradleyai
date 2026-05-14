@@ -62,10 +62,25 @@ type RunEvent =
 const requestTimeoutMs = 16 * 60 * 1000;
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/+$/, "");
 const apiToken = import.meta.env.VITE_API_TOKEN ?? "";
-const imageSlots: Array<{ slot: ImageSlot; label: string; required: boolean }> = [
-  { slot: "image1", label: "Reference 1", required: true },
-  { slot: "image2", label: "Reference 2", required: false },
-  { slot: "image3", label: "Reference 3", required: false }
+const imageSlots: Array<{ slot: ImageSlot; label: string; required: boolean; helper: string }> = [
+  {
+    slot: "image1",
+    label: "Main Image",
+    required: true,
+    helper: "Upload a main image to edit or enhance."
+  },
+  {
+    slot: "image2",
+    label: "Style / Secondary Image (optional)",
+    required: false,
+    helper: "(Optional) Add a second image for style transfer or blending."
+  },
+  {
+    slot: "image3",
+    label: "Additional Reference Image (optional)",
+    required: false,
+    helper: "(Optional) Add a third image for extra detail, reference, or blending."
+  }
 ];
 
 function apiUrl(path: string) {
@@ -125,6 +140,17 @@ function readFileAsDataUrl(file: File) {
   });
 }
 
+function displayModelName(modelName?: string) {
+  const name = (modelName ?? "Qwen-Rapid-AIO-NSFW-v23.safetensors")
+    .replace(/\.(safetensors|ckpt)$/i, "")
+    .replace(/-/g, " ")
+    .replace(/\s+NSFW.*$/i, "")
+    .replace(/\s+v\d+$/i, "")
+    .trim();
+
+  return name || "Qwen Rapid AIO";
+}
+
 export default function App() {
   const [workflow, setWorkflow] = useState<WorkflowStatus | null>(null);
   const [positivePrompt, setPositivePrompt] = useState("");
@@ -152,11 +178,11 @@ export default function App() {
   const canRun = Boolean(positivePrompt.trim() && references.image1 && !running);
   const runRequirements = [
     {
-      label: "Positive prompt",
+      label: "Prompt",
       met: Boolean(positivePrompt.trim())
     },
     {
-      label: "Reference 1",
+      label: "Main Image",
       met: Boolean(references.image1)
     }
   ];
@@ -311,7 +337,7 @@ export default function App() {
     event.preventDefault();
 
     if (!canRun) {
-      setError("Reference 1 and a positive prompt are required.");
+      setError("Main Image and Prompt are required.");
       return;
     }
 
@@ -370,311 +396,326 @@ export default function App() {
     void loadPortal();
   }, []);
 
+  const modelLabel = displayModelName(workflow?.modelName);
+  const statusIsPositive = !error && !["stopped", "failed"].some((word) => status.toLowerCase().includes(word));
+
+  const referenceCards = () => (
+    <section className="grid gap-3">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {imageSlots.map(({ slot, label, required, helper }) => {
+          const image = references[slot];
+
+          return (
+            <article key={slot} className="grid grid-rows-[7.5rem_10.5rem_3.5rem] overflow-hidden rounded-md border border-white/10 bg-[#101419]">
+              <div className="flex h-full flex-wrap items-start justify-between gap-x-3 gap-y-2 border-b border-white/10 px-3 py-3 sm:px-4">
+                <div className="min-w-0">
+                  <h2 className="text-sm font-semibold text-white">{label}</h2>
+                  <p className="mt-1 text-xs leading-5 text-slate-400">{helper}</p>
+                </div>
+                <span className="shrink-0 rounded border border-white/10 bg-white/[0.03] px-2 py-1 text-[0.65rem] font-medium uppercase tracking-[0.08em] text-slate-400">
+                  {required ? "Required" : "Optional"}
+                </span>
+              </div>
+              <label className="block cursor-pointer">
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="sr-only"
+                  onChange={(event) => void chooseImage(slot, event)}
+                />
+                <div className="flex h-full items-center justify-center bg-[#0b0d10]">
+                  {image ? (
+                    <img
+                      src={image.dataUrl}
+                      alt={image.label}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <span className="px-4 text-center text-sm text-slate-500">
+                      Upload image
+                    </span>
+                  )}
+                </div>
+              </label>
+              <div className="grid h-full gap-2 px-3 py-3 sm:px-4">
+                <p className="truncate text-sm text-slate-300" title={image?.filename}>
+                  {image?.filename ?? "No file selected"}
+                </p>
+                {image && (
+                  <button
+                    type="button"
+                    onClick={() => removeImage(slot)}
+                    className="h-9 rounded border border-rose-300/25 text-sm text-rose-100 hover:bg-rose-500/10"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+
   return (
     <main className="min-h-screen bg-[#0b0d10] text-slate-100">
-      <div className="mx-auto max-w-[1500px] px-5 py-5 lg:px-8">
-        <div className="grid min-h-screen gap-6 lg:grid-cols-[minmax(360px,480px)_1fr]">
-        <section className="flex flex-col gap-5">
-          <header className="border-b border-white/10 pb-5">
-            <p className="text-2xl font-black uppercase tracking-normal text-white">
+      <div className="mx-auto grid max-w-[1120px] gap-4 px-4 py-4 sm:px-5 sm:py-5 lg:px-8">
+        <header className="grid gap-3 border-b border-white/10 pb-4 md:grid-cols-[1fr_auto] md:items-end">
+          <div>
+            <p className="text-xl font-black uppercase tracking-normal text-white sm:text-2xl">
               <span className="text-orange-400">BRADLEY</span>AI
             </p>
-            <h1 className="mt-3 text-3xl font-semibold tracking-normal text-white sm:text-4xl">
-              BJS Qwen rapid AIO
+            <h1 className="mt-1 text-2xl font-semibold tracking-normal text-white sm:text-3xl">
+              Image Manpuliation Engine
             </h1>
-            <div className="mt-4 flex flex-wrap gap-2 text-xs">
+          </div>
+          <div className="grid gap-2 rounded-md border border-white/10 bg-[#101419] px-4 py-3 text-sm md:min-w-72">
+            <p className="text-slate-300">
+              <span className="text-slate-500">Model:</span>{" "}
+              <span className="font-medium text-white" title={workflow?.modelName}>
+                {modelLabel}
+              </span>
+            </p>
+            <p className="flex items-center gap-2 text-slate-300">
+              <span className="text-slate-500">Status:</span>
               <span
-                className="max-w-full truncate rounded border border-cyan-300/30 bg-cyan-300/10 px-3 py-1 text-cyan-100"
-                title={workflow?.modelName}
-              >
-                {workflow?.modelName ?? "Qwen-Rapid-AIO-NSFW-v23.safetensors"}
-              </span>
-              <span className="rounded border border-white/10 bg-white/[0.04] px-3 py-1 text-slate-300">
-                {status}
-              </span>
-            </div>
-          </header>
+                className={`h-2.5 w-2.5 rounded-full ${
+                  statusIsPositive ? "bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.75)]" : "bg-rose-400"
+                }`}
+              />
+              <span className="font-medium text-white">{status}</span>
+            </p>
+          </div>
+        </header>
 
-          <form className="grid gap-5" onSubmit={runWorkflow}>
-            <section className="grid gap-3">
-              <label className="text-sm font-medium text-slate-200" htmlFor="positive-prompt">
-                Positive prompt
-              </label>
+        <form className="grid gap-4" onSubmit={runWorkflow}>
+          {referenceCards()}
+
+          <button
+            disabled={running}
+            className="h-12 w-full rounded-md bg-orange-400 px-5 text-sm font-black uppercase tracking-normal text-slate-950 shadow-[0_0_28px_rgba(251,146,60,0.35)] transition hover:bg-orange-300 hover:shadow-[0_0_36px_rgba(251,146,60,0.55)] disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300 disabled:shadow-none"
+          >
+            {running ? "Generating image..." : "Generate Image"}
+          </button>
+
+          <section className="grid gap-3 md:grid-cols-2">
+            <label className="grid gap-2 text-sm font-medium text-slate-200 md:col-span-2" htmlFor="positive-prompt">
+              Prompt
               <textarea
                 id="positive-prompt"
                 value={positivePrompt}
                 onChange={(event) => setPositivePrompt(event.target.value)}
-                placeholder="Describe the edit or generation"
-                className="min-h-36 resize-y rounded border border-white/10 bg-[#11161b] px-3 py-3 text-sm leading-6 text-white outline-none placeholder:text-slate-500 focus:border-cyan-300/70"
+                placeholder="Describe what you want to create or change..."
+                className="min-h-28 resize-y rounded-md border border-white/10 bg-[#11161b] px-3 py-3 text-sm leading-6 text-white outline-none placeholder:text-slate-500 focus:border-orange-300/80"
               />
-            </section>
+            </label>
+            <label className="grid gap-2 text-sm font-medium text-slate-200 md:col-span-2" htmlFor="negative-prompt">
+              Negative Prompt
+              <textarea
+                id="negative-prompt"
+                value={negativePrompt}
+                onChange={(event) => setNegativePrompt(event.target.value)}
+                placeholder="What should be avoided..."
+                className="min-h-20 resize-y rounded-md border border-white/10 bg-[#11161b] px-3 py-3 text-sm leading-6 text-white outline-none placeholder:text-slate-500 focus:border-orange-300/80"
+              />
+            </label>
+          </section>
 
-            <details className="rounded border border-white/10 bg-[#101419] p-4">
-              <summary className="cursor-pointer text-sm font-medium text-slate-200">
-                Advanced settings
-              </summary>
-              <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                <label className="grid gap-2 text-sm text-slate-300">
-                  Width
-                  <input
-                    type="number"
-                    min={64}
-                    step={64}
-                    value={width}
-                    onChange={(event) => setWidth(Number(event.target.value))}
-                    className="h-10 rounded border border-white/10 bg-[#0b0d10] px-3 text-white outline-none focus:border-cyan-300/70"
-                  />
-                </label>
-                <label className="grid gap-2 text-sm text-slate-300">
-                  Height
-                  <input
-                    type="number"
-                    min={64}
-                    step={64}
-                    value={height}
-                    onChange={(event) => setHeight(Number(event.target.value))}
-                    className="h-10 rounded border border-white/10 bg-[#0b0d10] px-3 text-white outline-none focus:border-cyan-300/70"
-                  />
-                </label>
-                <label className="grid gap-2 text-sm text-slate-300">
-                  Steps
-                  <input
-                    type="number"
-                    min={1}
-                    max={100}
-                    value={steps}
-                    onChange={(event) => setSteps(Number(event.target.value))}
-                    className="h-10 rounded border border-white/10 bg-[#0b0d10] px-3 text-white outline-none focus:border-cyan-300/70"
-                  />
-                </label>
-                <label className="grid gap-2 text-sm text-slate-300">
-                  CFG
-                  <input
-                    type="number"
-                    min={0}
-                    step={0.1}
-                    value={cfg}
-                    onChange={(event) => setCfg(Number(event.target.value))}
-                    className="h-10 rounded border border-white/10 bg-[#0b0d10] px-3 text-white outline-none focus:border-cyan-300/70"
-                  />
-                </label>
-                <label className="grid gap-2 text-sm text-slate-300">
-                  Denoise
-                  <input
-                    type="number"
-                    min={0}
-                    max={1}
-                    step={0.05}
-                    value={denoise}
-                    onChange={(event) => setDenoise(Number(event.target.value))}
-                    className="h-10 rounded border border-white/10 bg-[#0b0d10] px-3 text-white outline-none focus:border-cyan-300/70"
-                  />
-                </label>
-                <label className="grid gap-2 text-sm text-slate-300">
-                  Seed
-                  <input
-                    inputMode="numeric"
-                    value={seed}
-                    onChange={(event) => setSeed(event.target.value.replace(/\D/g, ""))}
-                    placeholder="Random"
-                    className="h-10 rounded border border-white/10 bg-[#0b0d10] px-3 text-white outline-none placeholder:text-slate-500 focus:border-cyan-300/70"
-                  />
-                </label>
-                <label className="grid gap-2 text-sm text-slate-300 sm:col-span-2">
-                  Negative prompt
-                  <textarea
-                    value={negativePrompt}
-                    onChange={(event) => setNegativePrompt(event.target.value)}
-                    className="min-h-20 resize-y rounded border border-white/10 bg-[#0b0d10] px-3 py-2 text-white outline-none focus:border-cyan-300/70"
-                  />
-                </label>
-                <label className="grid gap-2 text-sm text-slate-300 sm:col-span-2">
-                  Filename prefix
-                  <input
-                    value={filenamePrefix}
-                    onChange={(event) => setFilenamePrefix(event.target.value)}
-                    className="h-10 rounded border border-white/10 bg-[#0b0d10] px-3 text-white outline-none focus:border-cyan-300/70"
-                  />
-                </label>
-              </div>
-            </details>
+          <details className="rounded-md border border-white/10 bg-[#101419] p-4">
+            <summary className="cursor-pointer text-sm font-medium text-slate-200">
+              Advanced settings
+            </summary>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <label className="grid gap-2 text-sm text-slate-300">
+                Width
+                <input
+                  type="number"
+                  min={64}
+                  step={64}
+                  value={width}
+                  onChange={(event) => setWidth(Number(event.target.value))}
+                  className="h-10 rounded border border-white/10 bg-[#0b0d10] px-3 text-white outline-none focus:border-orange-300/80"
+                />
+              </label>
+              <label className="grid gap-2 text-sm text-slate-300">
+                Height
+                <input
+                  type="number"
+                  min={64}
+                  step={64}
+                  value={height}
+                  onChange={(event) => setHeight(Number(event.target.value))}
+                  className="h-10 rounded border border-white/10 bg-[#0b0d10] px-3 text-white outline-none focus:border-orange-300/80"
+                />
+              </label>
+              <label className="grid gap-2 text-sm text-slate-300">
+                Steps
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={steps}
+                  onChange={(event) => setSteps(Number(event.target.value))}
+                  className="h-10 rounded border border-white/10 bg-[#0b0d10] px-3 text-white outline-none focus:border-orange-300/80"
+                />
+              </label>
+              <label className="grid gap-2 text-sm text-slate-300">
+                CFG
+                <input
+                  type="number"
+                  min={0}
+                  step={0.1}
+                  value={cfg}
+                  onChange={(event) => setCfg(Number(event.target.value))}
+                  className="h-10 rounded border border-white/10 bg-[#0b0d10] px-3 text-white outline-none focus:border-orange-300/80"
+                />
+              </label>
+              <label className="grid gap-2 text-sm text-slate-300">
+                Denoise
+                <input
+                  type="number"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={denoise}
+                  onChange={(event) => setDenoise(Number(event.target.value))}
+                  className="h-10 rounded border border-white/10 bg-[#0b0d10] px-3 text-white outline-none focus:border-orange-300/80"
+                />
+              </label>
+              <label className="grid gap-2 text-sm text-slate-300">
+                Seed
+                <input
+                  inputMode="numeric"
+                  value={seed}
+                  onChange={(event) => setSeed(event.target.value.replace(/\D/g, ""))}
+                  placeholder="Random"
+                  className="h-10 rounded border border-white/10 bg-[#0b0d10] px-3 text-white outline-none placeholder:text-slate-500 focus:border-orange-300/80"
+                />
+              </label>
+              <label className="grid gap-2 text-sm text-slate-300 lg:col-span-3">
+                Filename prefix
+                <input
+                  value={filenamePrefix}
+                  onChange={(event) => setFilenamePrefix(event.target.value)}
+                  className="h-10 rounded border border-white/10 bg-[#0b0d10] px-3 text-white outline-none focus:border-orange-300/80"
+                />
+              </label>
+            </div>
+          </details>
 
-            <label className="flex items-center gap-3 text-sm text-slate-300">
+          <div className="grid gap-3 lg:grid-cols-[1fr_1fr]">
+            <label className="flex items-center gap-3 rounded-md border border-white/10 bg-[#101419] px-4 py-3 text-sm text-slate-300">
               <input
                 type="checkbox"
                 checked={saveReferences}
                 onChange={(event) => setSaveReferences(event.target.checked)}
-                className="h-4 w-4 accent-cyan-300"
+                className="h-4 w-4 accent-orange-400"
               />
               Save uploaded reference set locally
             </label>
 
-            {error && (
-              <div className="whitespace-pre-wrap break-words rounded border border-rose-300/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
-                {error}
-              </div>
-            )}
-
-            <div className="rounded border border-white/10 bg-[#101419] px-4 py-3">
-              <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Run checklist</p>
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                {runRequirements.map((requirement) => (
-                  <div
-                    key={requirement.label}
-                    className={`rounded border px-3 py-2 text-sm ${
-                      requirement.met
-                        ? "border-emerald-300/25 bg-emerald-400/10 text-emerald-100"
-                        : "border-amber-300/25 bg-amber-400/10 text-amber-100"
-                    }`}
-                  >
-                    {requirement.met ? "Ready" : "Missing"}: {requirement.label}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded border border-white/10 bg-[#101419] px-4 py-3">
+            <div className="rounded-md border border-white/10 bg-[#101419] px-4 py-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <p className="text-xs uppercase tracking-[0.16em] text-slate-500">
-                  ComfyUI status
+                  Run status
                 </p>
                 {runProgress && (
-                  <span className="text-xs text-cyan-100">
+                  <span className="text-xs text-orange-100">
                     {runProgress.percent}% {runProgress.nodeId ? `node ${runProgress.nodeId}` : ""}
                   </span>
                 )}
               </div>
-              <div className="mt-3 rounded border border-white/10 bg-[#0b0d10] px-3 py-2 text-sm leading-6 text-slate-100">
-                {status}
-              </div>
+              <div className="mt-2 text-sm leading-6 text-slate-100">{status}</div>
               {runProgress && (
                 <div className="mt-3 h-2 overflow-hidden rounded bg-white/10">
                   <div
-                    className="h-full bg-cyan-300 transition-all"
+                    className="h-full bg-orange-300 transition-all"
                     style={{ width: `${runProgress.percent}%` }}
                   />
                 </div>
               )}
             </div>
+          </div>
 
-            <button
-              disabled={running}
-              className="h-12 rounded bg-cyan-300 px-5 text-sm font-bold text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300"
-            >
-              {running ? "Running workflow..." : canRun ? "Run workflow" : "Show what is missing"}
-            </button>
-          </form>
-        </section>
-
-        <section className="grid min-w-0 gap-6 lg:grid-rows-[auto_1fr]">
-          <section>
-            <div className="grid gap-4 md:grid-cols-3">
-              {imageSlots.map(({ slot, label, required }) => {
-                const image = references[slot];
-
-                return (
-                  <article key={slot} className="overflow-hidden rounded border border-white/10 bg-[#101419]">
-                    <div className="flex h-12 items-center justify-between gap-3 border-b border-white/10 px-4">
-                      <span className="text-sm font-medium text-white">{label}</span>
-                      <span className="text-xs uppercase tracking-[0.16em] text-slate-500">
-                        {required ? "Required" : "Uses ref 1"}
-                      </span>
-                    </div>
-                    <label className="block cursor-pointer">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="sr-only"
-                        onChange={(event) => void chooseImage(slot, event)}
-                      />
-                      <div className="flex aspect-square items-center justify-center bg-[#0b0d10]">
-                        {image ? (
-                          <img
-                            src={image.dataUrl}
-                            alt={image.label}
-                            className="h-full w-full object-cover"
-                          />
-                        ) : (
-                          <span className="px-4 text-center text-sm text-slate-500">
-                            Upload image
-                          </span>
-                        )}
-                      </div>
-                    </label>
-                    <div className="grid min-h-20 gap-3 px-4 py-3">
-                      <p className="truncate text-sm text-slate-300" title={image?.filename}>
-                        {image?.filename ?? "No file selected"}
-                      </p>
-                      {image && (
-                        <button
-                          onClick={() => removeImage(slot)}
-                          className="h-8 rounded border border-rose-300/25 text-sm text-rose-100 hover:bg-rose-500/10"
-                        >
-                          Remove
-                        </button>
-                      )}
-                    </div>
-                  </article>
-                );
-              })}
+          {error && (
+            <div className="whitespace-pre-wrap break-words rounded-md border border-rose-300/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+              {error}
             </div>
-          </section>
+          )}
 
-          <section className="min-h-[360px] border-t border-white/10 pt-5">
-            <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-              <div>
-                <h2 className="text-xl font-semibold text-white">Preview</h2>
-                {promptId && <p className="mt-1 text-sm text-slate-400">Prompt {promptId}</p>}
+          <div className="grid gap-2 rounded-md border border-white/10 bg-[#101419] px-4 py-3 sm:grid-cols-2">
+            {runRequirements.map((requirement) => (
+              <div
+                key={requirement.label}
+                className={`rounded border px-3 py-2 text-sm ${
+                  requirement.met
+                    ? "border-emerald-300/25 bg-emerald-400/10 text-emerald-100"
+                    : "border-amber-300/25 bg-amber-400/10 text-amber-100"
+                }`}
+              >
+                {requirement.met ? "Ready" : "Missing"}: {requirement.label}
               </div>
-              <div className="flex min-w-0 flex-wrap items-center gap-2">
-                {savedReferencePath && (
-                  <span className="max-w-full truncate rounded border border-emerald-300/25 bg-emerald-400/10 px-3 py-1 text-xs text-emerald-100">
-                    References saved locally
-                  </span>
-                )}
-                <button
-                  onClick={() => void loadLatestOutput()}
-                  className="h-9 rounded border border-white/10 px-3 text-sm text-slate-200 hover:border-cyan-300/50 hover:text-cyan-100"
-                >
-                  Load latest
-                </button>
-              </div>
+            ))}
+          </div>
+        </form>
+
+        <section className="min-h-[260px] border-t border-white/10 pt-4">
+          <div className="mb-3 grid gap-3 sm:flex sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-xl font-semibold text-white">Output Preview</h2>
+              <p className="mt-1 text-sm text-slate-400">
+                {promptId ? `Prompt ${promptId}` : "Your generated image will appear here"}
+              </p>
             </div>
+            <div className="grid min-w-0 gap-2 sm:flex sm:flex-wrap sm:items-center sm:justify-end">
+              {savedReferencePath && (
+                <span className="max-w-full truncate rounded border border-emerald-300/25 bg-emerald-400/10 px-3 py-1 text-xs text-emerald-100">
+                  References saved locally
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => void loadLatestOutput()}
+                className="h-10 rounded border border-white/10 px-3 text-sm text-slate-200 hover:border-orange-300/60 hover:text-orange-100 sm:h-9"
+              >
+                Load latest
+              </button>
+            </div>
+          </div>
 
-            {outputs.length === 0 ? (
-              <div className="flex min-h-[340px] items-center justify-center rounded border border-dashed border-white/15 bg-[#101419] px-6 text-center text-slate-500">
-                {running ? "Waiting for ComfyUI output" : "Generated images appear here"}
-              </div>
-            ) : (
-              <div className="grid gap-4 xl:grid-cols-2">
-                {outputs.map((image) => (
-                  <article key={`${image.nodeId}-${image.filename}`} className="overflow-hidden rounded border border-white/10 bg-[#101419]">
-                    <a href={apiUrl(image.proxyUrl)} target="_blank" rel="noreferrer">
-                      <img
-                        src={apiUrl(image.proxyUrl)}
-                        alt={image.filename}
-                        className="aspect-square w-full bg-[#0b0d10] object-contain"
-                      />
+          {outputs.length === 0 ? (
+            <div className="flex min-h-[220px] items-center justify-center rounded-md border border-dashed border-white/15 bg-[#101419] px-6 text-center text-slate-500 sm:min-h-[260px]">
+              {running ? "Waiting for ComfyUI output" : "Your generated image will appear here"}
+            </div>
+          ) : (
+            <div className="grid gap-4 xl:grid-cols-2">
+              {outputs.map((image) => (
+                <article key={`${image.nodeId}-${image.filename}`} className="overflow-hidden rounded-md border border-white/10 bg-[#101419]">
+                  <a href={apiUrl(image.proxyUrl)} target="_blank" rel="noreferrer">
+                    <img
+                      src={apiUrl(image.proxyUrl)}
+                      alt={image.filename}
+                      className="aspect-square w-full bg-[#0b0d10] object-contain"
+                    />
+                  </a>
+                  <div className="grid gap-3 px-4 py-3 sm:flex sm:flex-wrap sm:items-center sm:justify-between">
+                    <p className="min-w-0 truncate text-sm text-slate-300" title={image.filename}>
+                      {image.filename}
+                    </p>
+                    <a
+                      href={apiUrl(image.proxyUrl)}
+                      download={image.filename}
+                      className="rounded bg-emerald-300 px-3 py-2 text-center text-sm font-bold text-slate-950 hover:bg-emerald-200"
+                    >
+                      Save
                     </a>
-                    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-                      <p className="min-w-0 flex-1 truncate text-sm text-slate-300" title={image.filename}>
-                        {image.filename}
-                      </p>
-                      <a
-                        href={apiUrl(image.proxyUrl)}
-                        download={image.filename}
-                        className="rounded bg-emerald-300 px-3 py-2 text-sm font-bold text-slate-950 hover:bg-emerald-200"
-                      >
-                        Save
-                      </a>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            )}
-          </section>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
         </section>
-      </div>
       </div>
     </main>
   );
